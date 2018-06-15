@@ -1,0 +1,39 @@
+{
+  "name": "ci-sidecar",
+  "version": "1.0.0",
+  "description": "",
+  "author": "Brandon Siegel <brandon.siegel@microsoft.com> (https://github.com/bsiegel/ci-sidecar)",
+  "license": "MIT",
+  "repository": "https://github.com/bsiegel/ci-sidecar.git",
+  "homepage": "https://github.com/bsiegel/ci-sidecar",
+  "bugs": "https://github.com/bsiegel/ci-sidecar/issues",
+  "keywords": [
+    "probot",
+    "github",
+    "probot-app"
+  ],
+  "scripts": {
+    "dev": "nodemon --exec \"npm start\"",
+    "start": "probot run ./index.js",
+    "lint": "standard --fix",
+    "test": "jest && standard",
+    "test:watch": "jest --watch --notify --notifyMode=change --coverage"
+  },
+  "dependencies": {
+    "probot": "^6.0.0"
+  },
+  "devDependencies": {
+    "jest": "^22.4.3",
+    "nodemon": "^1.17.2",
+    "smee-client": "^1.0.1",
+    "standard": "^10.0.3"
+  },
+  "engines": {
+    "node": ">= 8.3.0"
+  },
+  "standard": {
+    "env": [
+      "jest"
+    ]
+  }
+}
