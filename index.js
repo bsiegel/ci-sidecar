@@ -25,7 +25,7 @@ module.exports = app => {
 
     const operations = []
     operations.push(
-      diff.create.map(async c => {
+      ...diff.create.map(async c => {
         const {jobId, payload} = c
         console.log(`Creating check for job ${jobId}:\n${JSON.stringify(payload)}`)
         const result = await context.github.checks.create(payload)
@@ -34,13 +34,13 @@ module.exports = app => {
       })
     )
     operations.push(
-      diff.update.map(async c => {
+      ...diff.update.map(async c => {
         const {payload} = c
         console.log(`Updating check:\n${JSON.stringify(payload)}`)
         await context.github.checks.update(payload)
       })
     )
-    await Promise.all(operations)
+    await Promise.all(operations.map(p => p.catch(e => e)))
 
     if (diff.pending === 0) {
       console.log(`No remaining pending jobs, deleting job info from the store`)
