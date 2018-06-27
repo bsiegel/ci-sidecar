@@ -10,9 +10,9 @@ module.exports = class Travis {
    * @property {Array<{name: string}>} branches
    * @property {{name: string, owner: {login: string}}} repository
    *
-   * @param {Status} payload
+   * @param {{payload: Status, log: {debug: function}}} context
    */
-  constructor (payload) {
+  constructor (context) {
     this.initialized = false
 
     try {
@@ -21,8 +21,9 @@ module.exports = class Travis {
         sha: headSha,
         branches: [{name: headBranch}],
         repository: {name: repoName, owner: {login: repoOwner}}
-      } = payload
+      } = context.payload
 
+      this.log = context.log
       this.owner = repoOwner
       this.repo = repoName
       this.headSha = headSha
@@ -79,7 +80,7 @@ module.exports = class Travis {
   getJobInfo (job) {
     const jobName = this.extractName(job.config.env)
     if (jobName) {
-      console.log(`Detected Job '${jobName}' in state '${job.state}'`)
+      this.log.debug(`Detected Job '${jobName}' in state '${job.state}'`)
       return {
         [job.id]: {
           name: jobName,
@@ -117,7 +118,7 @@ module.exports = class Travis {
       let outputString = ''
       let capture = false
 
-      console.log(`Getting log stream for job ${jobId}`)
+      this.log.debug(`Getting log stream for job ${jobId}`)
       const req = stream({
         uri: logUri,
         headers: this.headers
@@ -127,7 +128,7 @@ module.exports = class Travis {
       lines.on('line', line => {
         const trimmed = line.trim()
         if (!capture && trimmed === '---output') {
-          console.log(`Fenced output block detected for job ${jobId}`)
+          this.log.debug(`Fenced output block detected for job ${jobId}`)
           capture = true
         } else if (capture && trimmed === '---') {
           try {
