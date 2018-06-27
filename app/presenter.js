@@ -66,7 +66,7 @@ module.exports = class Presenter {
     }
 
     if (payload.status === 'completed') {
-      payload.conclusion = this.getConclusion(jobInfo.state)
+      payload.conclusion = this.getConclusion(jobInfo)
       payload.completed_at = jobInfo.finishedAt
 
       const output = await this.dataSource.getJobOutput(jobId)
@@ -91,12 +91,12 @@ module.exports = class Presenter {
     }
   }
 
-  getConclusion (state) {
-    if (state === 'passed') {
+  getConclusion (jobInfo) {
+    if (jobInfo.state === 'passed') {
       return 'success'
-    } else if (state === 'failed') {
+    } else if (jobInfo.state === 'failed' && !jobInfo.ignoreFailure) {
       return 'failure'
-    } else if (state === 'canceled') {
+    } else if (jobInfo.state === 'canceled') {
       return 'cancelled'
     } else {
       return 'neutral'

@@ -46,6 +46,7 @@ module.exports = class Travis {
    * @property {string} state
    * @property {string} started_at
    * @property {string} finished_at
+   * @property {boolean} allow_failure
    * @property {{env: string}} config
    */
   async getSupportedJobs () {
@@ -69,6 +70,7 @@ module.exports = class Travis {
    * @property {string} state
    * @property {string} startedAt
    * @property {string} finishedAt
+   * @property {boolean} ignoreFailure
    * @property {string} url
 
    * @param {TravisJob} job
@@ -84,6 +86,7 @@ module.exports = class Travis {
           state: job.state,
           startedAt: (job.started_at || new Date().toISOString()),
           finishedAt: job.finished_at,
+          ignoreFailure: job.allow_failure,
           url: `${this.jobUri}/${job.id}`
         }
       }
