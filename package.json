@@ -13,28 +13,49 @@
     "probot-app"
   ],
   "scripts": {
-    "dev": "nodemon --exec \"npm start\"",
-    "start": "probot run ./index.js",
-    "lint": "standard --fix",
-    "test": "jest && standard",
+    "build": "tsc",
+    "dev": "nodemon --ext ts,js --exec \"npm start\"",
+    "start": "ts-node node_modules/probot/bin/probot.js run ./src/index.ts",
+    "lint": "tslint --project .",
+    "test": "tsc --noEmit -p . && jest --coverage && npm run lint",
     "test:watch": "jest --watch --notify --notifyMode=change --coverage"
   },
   "dependencies": {
-    "probot": "^6.0.0",
+    "probot": "^7.0.0",
+    "request": "^2.87.0",
     "request-promise-native": "^1.0.5"
   },
   "devDependencies": {
-    "jest": "^22.4.3",
+    "@octokit/rest": "^15.6.0",
+    "@types/node": "^10.5.1",
+    "@types/request": "^2.47.1",
+    "@types/request-promise-native": "^1.0.15",
+    "github-webhook-event-types": "^1.1.0",
+    "jest": "^23.2.0",
     "nodemon": "^1.17.2",
-    "smee-client": "^1.0.1",
-    "standard": "^10.0.3"
+    "smee-client": "^1.0.2",
+    "ts-jest": "^23.0.0",
+    "ts-node": "^7.0.0",
+    "tslint": "^5.10.0",
+    "tslint-config-prettier": "^1.13.0",
+    "tslint-config-standard": "^7.1.0",
+    "typescript": "^2.9.2"
   },
   "engines": {
     "node": ">= 8.3.0"
   },
-  "standard": {
-    "env": [
-      "jest"
-    ]
+  "jest": {
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ],
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    }
   }
 }
