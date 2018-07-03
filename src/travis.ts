@@ -50,8 +50,11 @@ export class Travis {
       target_url: targetUrl,
       sha: headSha,
       branches: [{ name: headBranch }],
-      repository: { name: repoName, owner: { login: repoOwner } }
-    } = (context.payload as any as Status)
+      repository: {
+        name: repoName,
+        owner: { login: repoOwner }
+      }
+    } = (context.payload as any) as Status
 
     this.log = context.log
     this.owner = repoOwner
@@ -66,24 +69,25 @@ export class Travis {
 
     this.headers = {
       ...DEFAULT_HEADERS,
-      ...(domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN) ? { 'Authorization': `token ${process.env.TRAVIS_TOKEN}` } : null
+      ...(domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
+        ? { Authorization: `token ${process.env.TRAVIS_TOKEN}` }
+        : null)
     }
   }
 
   public async loadBuildInfo (): Promise<BuildInfo> {
     const buildUri = `${this.baseUri}/build/${this.buildId}?include=build.jobs,job.config`
-    this.buildInfo = await requestAsync({
+    this.buildInfo = (await requestAsync({
       headers: this.headers,
       json: true,
       uri: buildUri
-    }).promise() as TravisBuild
+    }).promise()) as TravisBuild
 
     return this.getBuildInfo()
   }
 
   public getSupportedJobs (): JobInfo[] {
-    return this.buildInfo!.jobs.map(this.getJobInfo, this)
-                               .filter(present)
+    return this.buildInfo!.jobs.map(this.getJobInfo, this).filter(present)
   }
 
   public getBuildInfo (): BuildInfo {
@@ -110,29 +114,31 @@ export class Travis {
         uri: logUri
       }).on('error', e => reject(e))
 
-      const lines = createReadline(req as any as NodeJS.ReadableStream)
-      lines.on('line', (line: string) => {
-        const trimmed = line.trim()
-        if (!capture && trimmed === '---output') {
-          this.log.debug(`Fenced output block detected for job ${jobId}`)
-          capture = true
-        } else if (capture && trimmed === '---') {
-          try {
-            lines.close()
-            req.abort()
-          } catch (e) {
-            // ignore
-          } finally {
-            this.log.debug(`Parsing output of job ${jobId}`)
-            resolve(tryParse(outputString))
+      const lines = createReadline((req as any) as NodeJS.ReadableStream)
+      lines
+        .on('line', (line: string) => {
+          const trimmed = line.trim()
+          if (!capture && trimmed === '---output') {
+            this.log.debug(`Fenced output block detected for job ${jobId}`)
+            capture = true
+          } else if (capture && trimmed === '---') {
+            try {
+              lines.close()
+              req.abort()
+            } catch (e) {
+              // ignore
+            } finally {
+              this.log.debug(`Parsing output of job ${jobId}`)
+              resolve(tryParse(outputString))
+            }
+          } else if (capture) {
+            outputString += trimmed
           }
-        } else if (capture) {
-          outputString += trimmed
-        }
-      }).on('close', () => {
-        this.log.debug(`Parsing output of job ${jobId}`)
-        resolve(tryParse(outputString))
-      })
+        })
+        .on('close', () => {
+          this.log.debug(`Parsing output of job ${jobId}`)
+          resolve(tryParse(outputString))
+        })
     })
   }
 
@@ -148,7 +154,7 @@ export class Travis {
       ignoreFailure: job.allow_failure,
       jobId: job.id.toString(),
       name: jobName,
-      startedAt: (job.started_at || new Date().toISOString()),
+      startedAt: job.started_at || new Date().toISOString(),
       state: job.state,
       url: `${this.jobUri}/${job.id}`
     }

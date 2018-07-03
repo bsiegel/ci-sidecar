@@ -17,6 +17,7 @@
     "dev": "nodemon --ext ts,js --exec \"npm start\"",
     "start": "ts-node node_modules/probot/bin/probot.js run ./src/index.ts",
     "lint": "tslint --project .",
+    "fmt": "prettier --write src/**/* && tslint --project . --fix",
     "test": "tsc --noEmit -p . && jest --coverage && npm run lint",
     "test:watch": "jest --watch --notify --notifyMode=change --coverage"
   },
@@ -34,6 +35,7 @@
     "github-webhook-event-types": "^1.1.0",
     "jest": "^23.2.0",
     "nodemon": "^1.17.2",
+    "prettier": "^1.13.7",
     "smee-client": "^1.0.2",
     "ts-jest": "^23.0.0",
     "ts-node": "^7.0.0",

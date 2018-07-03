@@ -10,12 +10,7 @@ interface GithubChecksCreateResponse {
 }
 
 export class GitHub {
-  private static readonly FINISHED_STATES = [
-    'passed',
-    'failed',
-    'errored',
-    'canceled'
-  ]
+  private static readonly FINISHED_STATES = ['passed', 'failed', 'errored', 'canceled']
 
   private readonly buildInfo: BuildInfo
   private readonly client: Octokit
@@ -38,7 +33,10 @@ export class GitHub {
       const previous = oldJobs.find(j => j.jobId === current.jobId)
       if (!previous) {
         diff.create.push(current)
-      } else if (this.getStatus(current) !== this.getStatus(previous) || current.name !== previous.name) {
+      } else if (
+        this.getStatus(current) !== this.getStatus(previous) ||
+        current.name !== previous.name
+      ) {
         diff.update.push(current)
       }
     }
@@ -95,7 +93,10 @@ export class GitHub {
     }
   }
 
-  private async addCompletionInfo (payload: Octokit.ChecksCreateParams | Octokit.ChecksUpdateParams, jobInfo: JobInfo): Promise<void> {
+  private async addCompletionInfo (
+    payload: Octokit.ChecksCreateParams | Octokit.ChecksUpdateParams,
+    jobInfo: JobInfo
+  ): Promise<void> {
     payload.conclusion = this.getConclusion(jobInfo)
     payload.completed_at = jobInfo.finishedAt
 
