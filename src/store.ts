@@ -22,7 +22,7 @@ export class Store {
     this.log = context.log
   }
 
-  public async updateAllJobs (jobs: JobInfo[]): Promise<JobInfo[]> {
+  public async replace (jobs: JobInfo[]): Promise<JobInfo[]> {
     const memory = (await this.data.get()) as Memory
     const oldJobs = memory[this.build.id]
     if (oldJobs) {
@@ -35,20 +35,22 @@ export class Store {
     return oldJobs || []
   }
 
-  public async updateJob (jobInfo: JobInfo): Promise<void> {
+  public async update (jobsToUpdate: JobInfo[]): Promise<void> {
     const jobs = (await this.data.get(this.build.id)) as JobInfo[] | undefined
     if (!jobs) {
       this.log.debug(`Store cannot update job, no memory of build ${this.build.id}`)
       return
     }
 
-    const jobIndex = jobs.findIndex(j => j.jobId === jobInfo.jobId)
-    if (jobIndex > -1) {
-      this.log.debug(`Store updating existing job ${jobInfo.jobId} for build  ${this.build.id}`)
-      jobs[jobIndex] = jobInfo
-    } else {
-      this.log.debug(`Store adding new job ${jobInfo.jobId} for build  ${this.build.id}`)
-      jobs.push(jobInfo)
+    for (const jobInfo of jobsToUpdate) {
+      const jobIndex = jobs.findIndex(j => j.jobId === jobInfo.jobId)
+      if (jobIndex > -1) {
+        this.log.debug(`Store updating existing job ${jobInfo.jobId} for build ${this.build.id}`)
+        jobs[jobIndex] = jobInfo
+      } else {
+        this.log.debug(`Store adding new job ${jobInfo.jobId} for build ${this.build.id}`)
+        jobs.push(jobInfo)
+      }
     }
 
     await this.data.set(this.build.id, jobs)
