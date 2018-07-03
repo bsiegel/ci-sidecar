@@ -1,11 +1,10 @@
 // tslint:disable-next-line:no-implicit-dependencies
-import * as Octokit from '@octokit/rest'
-import { Context } from 'probot'
-// tslint:disable-next-line:no-submodule-imports
-import { LoggerWithTarget } from 'probot/lib/wrap-logger'
+import Octokit from '@octokit/rest'
+import { Context, Logger } from 'probot'
 
 import { BuildInfo, GetJobOutputFunc, JobDiff, JobInfo } from './ci'
 
+// https://developer.github.com/v3/checks/runs/#response
 interface GithubChecksCreateResponse {
   id: number
 }
@@ -21,7 +20,7 @@ export class GitHub {
   private readonly buildInfo: BuildInfo
   private readonly client: Octokit
   private readonly getJobOutput: GetJobOutputFunc
-  private readonly log: LoggerWithTarget
+  private readonly log: Logger
 
   public constructor (context: Context, buildInfo: BuildInfo, getJobOutput: GetJobOutputFunc) {
     this.buildInfo = buildInfo

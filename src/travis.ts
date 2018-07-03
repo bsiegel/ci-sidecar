@@ -1,24 +1,22 @@
 // tslint:disable-next-line:no-implicit-dependencies
 import { Status } from 'github-webhook-event-types'
-import { Context } from 'probot'
-// tslint:disable-next-line:no-submodule-imports
-import { LoggerWithTarget } from 'probot/lib/wrap-logger'
+import { Context, Logger } from 'probot'
 import { createInterface as createReadline } from 'readline'
-import * as request from 'request'
-import * as requestAsync from 'request-promise-native'
+import request from 'request'
+import requestAsync from 'request-promise-native'
 
 import { BuildInfo, JobInfo } from './ci'
 
 const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
 
 // https://developer.travis-ci.com/resource/build
-export interface TravisBuild {
+interface TravisBuild {
   jobs: TravisJob[]
   pull_request_number: number
 }
 
 // https://developer.travis-ci.com/resource/jobs
-export interface TravisJob {
+interface TravisJob {
   allow_failure: boolean
   id: number
   state: string
@@ -42,7 +40,7 @@ export class Travis {
   private readonly headers: request.Headers
   private readonly headSha: string
   private readonly jobUri: string
-  private readonly log: LoggerWithTarget
+  private readonly log: Logger
   private readonly owner: string
   private readonly repo: string
   private buildInfo?: TravisBuild
