@@ -20,8 +20,8 @@ export = (app: Application) => {
     const jobs = travis.getSupportedJobs()
     context.log(`Discovered ${jobs.length} supported jobs`)
 
-    const store = new Store(buildInfo)
-    const previous = store.updateAllJobs(jobs)
+    const store = new Store(context, buildInfo)
+    const previous = await store.updateAllJobs(jobs)
 
     const github = new GitHub(context, buildInfo, travis.getJobOutput)
     const diff = github.jobsToUpdate(previous, jobs)
@@ -32,7 +32,7 @@ export = (app: Application) => {
       ...diff.create.map(async j => {
         const checkRunId = await github.createCheck(j)
         j.checkRunId = checkRunId
-        store.updateJob(j)
+        await store.updateJob(j)
       })
     )
     operations.push(
