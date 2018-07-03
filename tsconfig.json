@@ -19,6 +19,10 @@
       "strictNullChecks": true,
       "strictPropertyInitialization": true,
       "target": "es2017",
+      "typeRoots": [
+        "./node_modules/@types",
+        "./types"
+      ]
     },
     "compileOnSave": true,
     "include": [

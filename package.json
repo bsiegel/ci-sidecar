@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "probot": "^7.0.0",
+    "probot-metadata": "^1.0.0",
     "request": "^2.87.0",
     "request-promise-native": "^1.0.5"
   },
