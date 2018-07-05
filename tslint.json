@@ -1,13 +1,13 @@
 {
-    "defaultSeverity": "error",
-    "extends": [
-        "tslint:latest",
-        "tslint-config-prettier",
-        "tslint-config-standard"
-    ],
-    "jsRules": {},
-    "rules": {
-        "interface-name": false
-    },
-    "rulesDirectory": []
+  "defaultSeverity": "error",
+  "extends": [
+    "tslint:latest",
+    "tslint-config-prettier",
+    "tslint-config-standard"
+  ],
+  "jsRules": {},
+  "rules": {
+    "interface-name": false
+  },
+  "rulesDirectory": []
 }
