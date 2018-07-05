@@ -22,9 +22,9 @@ export class Store {
     this.log = context.log
   }
 
-  public async replace (jobs: JobInfo[]): Promise<JobInfo[]> {
-    const memory = (await this.data.get()) as Memory
-    const oldJobs = memory[this.build.id]
+  public async replace (jobs: ReadonlyArray<JobInfo>): Promise<ReadonlyArray<JobInfo>> {
+    const memory = (await this.data.get()) as Memory | undefined
+    const oldJobs = memory ? memory[this.build.id] : undefined
     if (oldJobs) {
       this.log.debug(`Store updating existing memory for build ${this.build.id}`)
     } else {
@@ -35,7 +35,7 @@ export class Store {
     return oldJobs || []
   }
 
-  public async update (jobsToUpdate: JobInfo[]): Promise<void> {
+  public async update (jobsToUpdate: ReadonlyArray<JobInfo>): Promise<void> {
     const jobs = (await this.data.get(this.build.id)) as JobInfo[] | undefined
     if (!jobs) {
       this.log.debug(`Store cannot update job, no memory of build ${this.build.id}`)

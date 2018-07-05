@@ -11,31 +11,32 @@ const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
 
 // https://developer.travis-ci.com/resource/build
 interface TravisBuild {
-  jobs: TravisJob[]
-  pull_request_number: number
+  readonly jobs: ReadonlyArray<TravisJob>
+  readonly pull_request_number: number
 }
 
 // https://developer.travis-ci.com/resource/jobs
 interface TravisJob {
-  allow_failure: boolean
-  id: number
-  state: string
-  started_at: string
-  finished_at: string
-  config: { env: string }
+  readonly allow_failure: boolean
+  readonly config: { readonly env: string }
+  readonly finished_at: string
+  readonly id: number
+  readonly started_at: string
+  readonly state: string
 }
 
 export class Travis {
-  public static tryCreate (context: Context): Travis | null {
+  public static tryCreate (context: Context): Travis | undefined {
     try {
       return new Travis(context)
     } catch (e) {
-      return null
+      return undefined
     }
   }
 
   private readonly baseUri: string
   private readonly buildId: string
+  private buildInfo?: TravisBuild
   private readonly headBranch: string
   private readonly headers: request.Headers
   private readonly headSha: string
@@ -43,36 +44,36 @@ export class Travis {
   private readonly log: Logger
   private readonly owner: string
   private readonly repo: string
-  private buildInfo?: TravisBuild
 
   public constructor (context: Context) {
     const {
-      target_url: targetUrl,
-      sha: headSha,
       branches: [{ name: headBranch }],
       repository: {
         name: repoName,
         owner: { login: repoOwner }
-      }
+      },
+      sha: headSha,
+      target_url: targetUrl
     } = (context.payload as any) as Status
 
-    this.log = context.log
-    this.owner = repoOwner
-    this.repo = repoName
-    this.headSha = headSha
-    this.headBranch = headBranch
-    this.buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
-
+    const buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
     const domain = (/\/\/(travis-ci\.\w+)\//g.exec(targetUrl) || [])[1]
-    this.baseUri = `https://api.${domain}`
-    this.jobUri = `https://${domain}/${this.owner}/${this.repo}/jobs`
-
-    this.headers = {
+    const headers = {
       ...DEFAULT_HEADERS,
       ...(domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
         ? { Authorization: `token ${process.env.TRAVIS_TOKEN}` }
-        : null)
+        : undefined)
     }
+
+    this.baseUri = `https://api.${domain}`
+    this.buildId = buildId
+    this.headBranch = headBranch
+    this.headers = headers
+    this.headSha = headSha
+    this.jobUri = `https://${domain}/${repoOwner}/${repoName}/jobs`
+    this.log = context.log
+    this.owner = repoOwner
+    this.repo = repoName
   }
 
   public async loadBuildInfo (): Promise<BuildInfo> {
@@ -86,7 +87,7 @@ export class Travis {
     return this.getBuildInfo()
   }
 
-  public getSupportedJobs (): JobInfo[] {
+  public getSupportedJobs (): ReadonlyArray<JobInfo> {
     return this.buildInfo!.jobs.map(this.getJobInfo, this).filter(present)
   }
 
@@ -101,8 +102,8 @@ export class Travis {
     }
   }
 
-  public async getJobOutput (jobInfo: JobInfo): Promise<object | null> {
-    return new Promise<object | null>((resolve, reject) => {
+  public async getJobOutput (jobInfo: JobInfo): Promise<object | undefined> {
+    return new Promise<object | undefined>((resolve, reject) => {
       const jobId = jobInfo.jobId
       const logUri = `${this.baseUri}/job/${jobId}/log.txt`
       let outputString = ''
@@ -142,10 +143,10 @@ export class Travis {
     })
   }
 
-  private getJobInfo (job: TravisJob): JobInfo | null {
+  private getJobInfo (job: TravisJob): JobInfo | undefined {
     const jobName = this.extractName(job.config.env)
     if (!jobName) {
-      return null
+      return undefined
     }
 
     this.log.debug(`Detected Job '${jobName}' in state '${job.state}'`)
@@ -160,24 +161,24 @@ export class Travis {
     }
   }
 
-  private extractName (env: string): string | null {
+  private extractName (env: string): string | undefined {
     const match = /CHECK_NAME=('.*?'|".*?"|\S+)/g.exec(env)
     if (match) {
       return match[1].replace(/["']/g, '')
     } else {
-      return null
+      return undefined
     }
   }
 }
 
-function tryParse (str: string): object | null {
+function tryParse (str: string): object | undefined {
   try {
     return JSON.parse(str)
   } catch (e) {
-    return null
+    return undefined
   }
 }
 
 function present<T> (input: null | undefined | T): input is T {
-  return input != null
+  return input != undefined
 }

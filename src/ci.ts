@@ -1,26 +1,26 @@
 export interface BuildInfo {
-  headBranch: string
-  headSha: string
-  id: string
-  owner: string
-  number: number
-  repo: string
+  readonly headBranch: string
+  readonly headSha: string
+  readonly id: string
+  readonly owner: string
+  readonly number: number
+  readonly repo: string
 }
 
 export interface JobDiff {
-  create: JobInfo[]
-  update: JobInfo[]
+  readonly create: ReadonlyArray<JobInfo>
+  readonly update: ReadonlyArray<JobInfo>
 }
 
 export interface JobInfo {
-  jobId: string
+  readonly jobId: string
   checkRunId?: string
-  finishedAt: string
-  ignoreFailure: boolean
-  name: string
-  startedAt: string
-  state: string
-  url: string
+  readonly finishedAt: string
+  readonly ignoreFailure: boolean
+  readonly name: string
+  readonly startedAt: string
+  readonly state: string
+  readonly url: string
 }
 
-export type GetJobOutputFunc = (jobInfo: JobInfo) => Promise<object | null>
+export type GetJobOutputFunc = (jobInfo: JobInfo) => Promise<object | undefined>

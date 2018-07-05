@@ -8,16 +8,21 @@ declare module 'probot-metadata' {
     }
     
     interface Metadata {
-      get(key?: string): Promise<object | undefined>
-      set(value: object): Promise<Octokit.AnyResponse>
-      set(key: string, value: object): Promise<Octokit.AnyResponse>
+      get (): Promise<Data | undefined>
+      get (key: string): Promise<object | undefined>
+      set (value: Data): Promise<Octokit.AnyResponse>
+      set (key: string, value: object): Promise<Octokit.AnyResponse>
+    }
+
+    interface Data {
+      [key: string]: object | undefined
     }
 
     interface Issue {
       body?: string
-      number: number
-      owner: string
-      repo: string
+      readonly number: number
+      readonly owner: string
+      readonly repo: string
     }
   }
 

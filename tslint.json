@@ -7,7 +7,9 @@
   ],
   "jsRules": {},
   "rules": {
-    "interface-name": false
+    "interface-name": false,
+    "no-null-keyword": true,
+    "triple-equals": [true, "allow-undefined-check"]
   },
   "rulesDirectory": []
 }

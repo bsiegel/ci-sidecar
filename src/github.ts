@@ -6,7 +6,7 @@ import { BuildInfo, GetJobOutputFunc, JobDiff, JobInfo } from './ci'
 
 // https://developer.github.com/v3/checks/runs/#response
 interface GithubChecksCreateResponse {
-  id: number
+  readonly id: number
 }
 
 export class GitHub {
@@ -20,28 +20,30 @@ export class GitHub {
   public constructor (context: Context, buildInfo: BuildInfo, getJobOutput: GetJobOutputFunc) {
     this.buildInfo = buildInfo
     this.client = context.github
-    this.log = context.log
     this.getJobOutput = getJobOutput
+    this.log = context.log
   }
-  public jobsToUpdate (oldJobs: JobInfo[], newJobs: JobInfo[]): JobDiff {
-    const diff: JobDiff = {
-      create: [],
-      update: []
-    }
+
+  public jobsToUpdate (oldJobs: ReadonlyArray<JobInfo>, newJobs: ReadonlyArray<JobInfo>): JobDiff {
+    const create: JobInfo[] = []
+    const update: JobInfo[] = []
 
     for (const current of newJobs) {
       const previous = oldJobs.find(j => j.jobId === current.jobId)
       if (!previous) {
-        diff.create.push(current)
+        create.push(current)
       } else if (
         this.getStatus(current) !== this.getStatus(previous) ||
         current.name !== previous.name
       ) {
-        diff.update.push(current)
+        update.push(current)
       }
     }
 
-    return diff
+    return {
+      create,
+      update
+    }
   }
 
   public async createCheck (jobInfo: JobInfo): Promise<string> {
