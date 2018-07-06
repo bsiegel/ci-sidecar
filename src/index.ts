@@ -28,7 +28,7 @@ export = (app: Application) => {
     const store = new Store(context, buildInfo)
     const previous = await store.replace(jobs)
 
-    const github = new GitHub(context, buildInfo, travis.getJobOutput)
+    const github = new GitHub(context, buildInfo, travis.getJobOutput.bind(travis))
     const diff = github.jobsToUpdate(previous, jobs)
     context.log(`Will create ${diff.create.length} checks and update ${diff.update.length} checks`)
 
