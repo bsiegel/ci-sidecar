@@ -2,11 +2,11 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 export interface BuildInfo {
+  readonly domain: string
   readonly headBranch: string
   readonly headSha: string
   readonly id: string
   readonly owner: string
-  readonly number: number
   readonly repo: string
 }
 

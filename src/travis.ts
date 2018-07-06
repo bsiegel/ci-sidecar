@@ -15,7 +15,6 @@ const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
 // https://developer.travis-ci.com/resource/build
 interface TravisBuild {
   readonly jobs: ReadonlyArray<TravisJob>
-  readonly pull_request_number: number
 }
 
 // https://developer.travis-ci.com/resource/jobs
@@ -29,78 +28,70 @@ interface TravisJob {
 }
 
 export class Travis {
-  public static tryCreate (context: Context): Travis | undefined {
+  public static parseStatus (payload: Status): BuildInfo | undefined {
     try {
-      return new Travis(context)
+      const {
+        branches: [{ name: headBranch }],
+        repository: {
+          name: repoName,
+          owner: { login: repoOwner }
+        },
+        sha: headSha,
+        target_url: targetUrl
+      } = payload
+
+      const buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
+      const domain = (/\/\/(travis-ci\.\w+)\//g.exec(targetUrl) || [])[1]
+      if (!buildId || !domain) {
+        return undefined
+      }
+
+      return {
+        domain,
+        headBranch,
+        headSha,
+        id: buildId,
+        owner: repoOwner,
+        repo: repoName
+      }
     } catch (e) {
       return undefined
     }
   }
 
   private readonly baseUri: string
-  private readonly buildId: string
-  private buildInfo?: TravisBuild
-  private readonly headBranch: string
+  private readonly buildInfo: BuildInfo
   private readonly headers: request.Headers
-  private readonly headSha: string
   private readonly jobUri: string
   private readonly log: Logger
-  private readonly owner: string
-  private readonly repo: string
 
-  public constructor (context: Context) {
-    const {
-      branches: [{ name: headBranch }],
-      repository: {
-        name: repoName,
-        owner: { login: repoOwner }
-      },
-      sha: headSha,
-      target_url: targetUrl
-    } = (context.payload as any) as Status
-
-    const buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
-    const domain = (/\/\/(travis-ci\.\w+)\//g.exec(targetUrl) || [])[1]
-    if (!buildId || !domain) {
-      throw new Error('Failed to extract build info from targetUrl')
-    }
-
-    const headers = {
+  public constructor (context: Context, buildInfo: BuildInfo) {
+    this.baseUri = `https://api.${buildInfo.domain}`
+    this.buildInfo = buildInfo
+    this.headers = {
       ...DEFAULT_HEADERS,
-      ...(domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
+      ...(buildInfo.domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
         ? { Authorization: `token ${process.env.TRAVIS_TOKEN}` }
         : undefined)
     }
-
-    this.baseUri = `https://api.${domain}`
-    this.buildId = buildId
-    this.headBranch = headBranch
-    this.headers = headers
-    this.headSha = headSha
-    this.jobUri = `https://${domain}/${repoOwner}/${repoName}/jobs`
+    this.jobUri = `https://${buildInfo.domain}/${buildInfo.owner}/${buildInfo.repo}/jobs`
     this.log = context.log
-    this.owner = repoOwner
-    this.repo = repoName
   }
 
-  public async loadBuildInfo (): Promise<BuildInfo | undefined> {
-    const buildUri = `${this.baseUri}/build/${this.buildId}?include=build.jobs,job.config`
+  public async getSupportedJobs (): Promise<ReadonlyArray<JobInfo> | undefined> {
+    const buildUri = `${this.baseUri}/build/${this.buildInfo.id}?include=build.jobs,job.config`
 
     try {
-      this.buildInfo = (await requestAsync({
+      const buildInfo = (await requestAsync({
         headers: this.headers,
         json: true,
         uri: buildUri
       }).promise()) as TravisBuild
-      return this.getBuildInfo()
+      return buildInfo.jobs.map(this.getJobInfo, this).filter(present)
     } catch (e) {
-      this.log.error(e, `Failed to load build info for build ${this.buildId}`)
+      this.log.error(e, `Failed to load job info for build ${this.buildInfo.id}`)
       return undefined
     }
-  }
-
-  public getSupportedJobs (): ReadonlyArray<JobInfo> {
-    return this.buildInfo!.jobs.map(this.getJobInfo, this).filter(present)
   }
 
   public async getJobOutput (jobInfo: JobInfo): Promise<object | undefined> {
@@ -142,17 +133,6 @@ export class Travis {
           resolve(tryParse(outputString))
         })
     })
-  }
-
-  private getBuildInfo (): BuildInfo {
-    return {
-      headBranch: this.headBranch,
-      headSha: this.headSha,
-      id: this.buildId,
-      number: this.buildInfo!.pull_request_number,
-      owner: this.owner,
-      repo: this.repo
-    }
   }
 
   private getJobInfo (job: TravisJob): JobInfo | undefined {
