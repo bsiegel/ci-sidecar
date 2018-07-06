@@ -16,6 +16,10 @@ export = (app: Application) => {
     context.log(`Travis info detected in status update ${context.payload.id}`)
 
     const buildInfo = await travis.loadBuildInfo()
+    if (!buildInfo) {
+      return
+    }
+
     context.log(`Loaded Travis info for build ${buildInfo.id}`)
 
     const jobs = travis.getSupportedJobs()
@@ -33,8 +37,10 @@ export = (app: Application) => {
     operations.push(
       ...diff.create.map(async j => {
         const checkRunId = await github.createCheck(j)
-        j.checkRunId = checkRunId
-        toStore.push(j)
+        if (checkRunId) {
+          j.checkRunId = checkRunId
+          toStore.push(j)
+        }
       })
     )
     operations.push(

@@ -58,6 +58,10 @@ export class Travis {
 
     const buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
     const domain = (/\/\/(travis-ci\.\w+)\//g.exec(targetUrl) || [])[1]
+    if (!buildId || !domain) {
+      throw new Error('Failed to extract build info from targetUrl')
+    }
+
     const headers = {
       ...DEFAULT_HEADERS,
       ...(domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
@@ -76,30 +80,24 @@ export class Travis {
     this.repo = repoName
   }
 
-  public async loadBuildInfo (): Promise<BuildInfo> {
+  public async loadBuildInfo (): Promise<BuildInfo | undefined> {
     const buildUri = `${this.baseUri}/build/${this.buildId}?include=build.jobs,job.config`
-    this.buildInfo = (await requestAsync({
-      headers: this.headers,
-      json: true,
-      uri: buildUri
-    }).promise()) as TravisBuild
 
-    return this.getBuildInfo()
+    try {
+      this.buildInfo = (await requestAsync({
+        headers: this.headers,
+        json: true,
+        uri: buildUri
+      }).promise()) as TravisBuild
+      return this.getBuildInfo()
+    } catch (e) {
+      this.log.error(e, `Failed to load build info for build ${this.buildId}`)
+      return undefined
+    }
   }
 
   public getSupportedJobs (): ReadonlyArray<JobInfo> {
     return this.buildInfo!.jobs.map(this.getJobInfo, this).filter(present)
-  }
-
-  public getBuildInfo (): BuildInfo {
-    return {
-      headBranch: this.headBranch,
-      headSha: this.headSha,
-      id: this.buildId,
-      number: this.buildInfo!.pull_request_number,
-      owner: this.owner,
-      repo: this.repo
-    }
   }
 
   public async getJobOutput (jobInfo: JobInfo): Promise<object | undefined> {
@@ -141,6 +139,17 @@ export class Travis {
           resolve(tryParse(outputString))
         })
     })
+  }
+
+  private getBuildInfo (): BuildInfo {
+    return {
+      headBranch: this.headBranch,
+      headSha: this.headSha,
+      id: this.buildId,
+      number: this.buildInfo!.pull_request_number,
+      owner: this.owner,
+      repo: this.repo
+    }
   }
 
   private getJobInfo (job: TravisJob): JobInfo | undefined {
