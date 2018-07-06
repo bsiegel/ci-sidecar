@@ -9,33 +9,52 @@ interface GithubChecksCreateResponse {
   readonly id: number
 }
 
+// https://developer.github.com/v3/checks/runs/#response-3
+interface GithubChecksListResponse {
+  readonly check_runs: ReadonlyArray<GithubCheck>
+}
+
+interface GithubCheck {
+  readonly external_id?: string
+  readonly id: number
+  readonly name: string
+  readonly status: 'completed' | 'in_progress' | 'queued'
+  readonly app: { readonly id: number }
+}
+
 export class GitHub {
   private static readonly FINISHED_STATES = ['passed', 'failed', 'errored', 'canceled']
 
+  private readonly appId: number
   private readonly buildInfo: BuildInfo
   private readonly client: Octokit
   private readonly getJobOutput: GetJobOutputFunc
   private readonly log: Logger
 
-  public constructor (context: Context, buildInfo: BuildInfo, getJobOutput: GetJobOutputFunc) {
+  public constructor (
+    appId: number,
+    context: Context,
+    buildInfo: BuildInfo,
+    getJobOutput: GetJobOutputFunc
+  ) {
+    this.appId = appId
     this.buildInfo = buildInfo
     this.client = context.github
     this.getJobOutput = getJobOutput
     this.log = context.log
   }
 
-  public jobsToUpdate (oldJobs: ReadonlyArray<JobInfo>, newJobs: ReadonlyArray<JobInfo>): JobDiff {
+  public async jobsToUpdate (newJobs: ReadonlyArray<JobInfo>): Promise<JobDiff> {
     const create: JobInfo[] = []
     const update: JobInfo[] = []
 
+    const existingChecks = await this.getExistingChecks()
     for (const current of newJobs) {
-      const previous = oldJobs.find(j => j.jobId === current.jobId)
-      if (!previous) {
+      const existing = existingChecks.find(c => this.isCheckForJob(c, current))
+      if (!existing) {
         create.push(current)
-      } else if (
-        this.getStatus(current) !== this.getStatus(previous) ||
-        current.name !== previous.name
-      ) {
+      } else if (this.getStatus(current) !== existing.status || current.name !== existing.name) {
+        current.checkRunId = existing.id.toString()
         update.push(current)
       }
     }
@@ -75,13 +94,44 @@ export class GitHub {
       await this.client.checks.update(payload)
       this.log.debug(`Check ${jobInfo.checkRunId} updated for job ${jobInfo.jobId}`)
     } catch (e) {
-      this.log.error(e, `Error occurred updating check ${jobInfo.checkRunId} for job ${jobInfo.jobId}`)
+      this.log.error(
+        e,
+        `Error occurred updating check ${jobInfo.checkRunId} for job ${jobInfo.jobId}`
+      )
     }
+  }
+
+  private async getExistingChecks (): Promise<ReadonlyArray<GithubCheck>> {
+    this.log.debug(`Fetching existing checks for build ${this.buildInfo.id}`)
+    try {
+      const result = await this.client.checks.listForRef({
+        owner: this.buildInfo.owner,
+        ref: this.buildInfo.headSha,
+        repo: this.buildInfo.repo
+      })
+
+      const checksResponse = result.data as GithubChecksListResponse
+      const myChecks = checksResponse.check_runs.filter(c => c.app.id === this.appId)
+      this.log.debug(`Fetched ${myChecks.length} existing checks for build ${this.buildInfo.id}`)
+      return myChecks
+    } catch (e) {
+      this.log.error(e, `Error occurred fetching existing checks for build ${this.buildInfo.id}`)
+      return []
+    }
+  }
+
+  private isCheckForJob (c: GithubCheck, j: JobInfo): boolean {
+    if (!c.external_id) {
+      return false
+    }
+    const [buildId, jobId] = c.external_id.split('/')
+    return this.buildInfo.id === buildId && j.jobId === jobId
   }
 
   private getChecksCreateParams (jobInfo: JobInfo): Octokit.ChecksCreateParams {
     return {
       details_url: jobInfo.url,
+      external_id: `${this.buildInfo.id}/${jobInfo.jobId}`,
       head_branch: this.buildInfo.headBranch,
       head_sha: this.buildInfo.headSha,
       name: jobInfo.name,
@@ -96,6 +146,7 @@ export class GitHub {
     return {
       check_run_id: jobInfo.checkRunId!,
       details_url: jobInfo.url,
+      external_id: `${this.buildInfo.id}/${jobInfo.jobId}`,
       name: jobInfo.name,
       owner: this.buildInfo.owner,
       repo: this.buildInfo.repo,
@@ -114,10 +165,15 @@ export class GitHub {
     try {
       const output = await this.getJobOutput(jobInfo)
       if (output) {
-        payload.output = output as Octokit.ChecksCreateParamsOutput | Octokit.ChecksUpdateParamsOutput
+        payload.output = output as
+          | Octokit.ChecksCreateParamsOutput
+          | Octokit.ChecksUpdateParamsOutput
       }
     } catch (e) {
-      this.log.error(e, `Error occurred while getting job output for job ${jobInfo.jobId}, output will be skipped`)
+      this.log.error(
+        e,
+        `Error occurred while getting job output for job ${jobInfo.jobId}, output will be skipped`
+      )
     }
   }
 
