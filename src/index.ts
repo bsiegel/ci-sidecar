@@ -47,7 +47,7 @@ async function processJobs (context: Context, buildInfo: BuildInfo): Promise<voi
 
 function getProgressKey (buildInfo: BuildInfo): string {
   // Build ID is unique per Travis installation
-  return `${buildInfo.domain.toLowerCase()}/${buildInfo.id}`
+  return `${buildInfo.domain}/${buildInfo.id}`
 }
 
 export = (app: Application) => {

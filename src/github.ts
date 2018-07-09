@@ -127,14 +127,14 @@ export class GitHub {
     if (!c.external_id) {
       return false
     }
-    const [buildId, jobId] = c.external_id.split('/')
-    return this.buildInfo.id === buildId && j.jobId === jobId
+    const [domain, buildId, jobId] = c.external_id.split('/')
+    return this.buildInfo.domain === domain && this.buildInfo.id === buildId && j.jobId === jobId
   }
 
   private getChecksCreateParams (jobInfo: JobInfo): Octokit.ChecksCreateParams {
     return {
       details_url: jobInfo.url,
-      external_id: `${this.buildInfo.id}/${jobInfo.jobId}`,
+      external_id: `${this.buildInfo.domain}/${this.buildInfo.id}/${jobInfo.jobId}`,
       head_branch: this.buildInfo.headBranch,
       head_sha: this.buildInfo.headSha,
       name: jobInfo.name,
@@ -149,7 +149,7 @@ export class GitHub {
     return {
       check_run_id: jobInfo.checkRunId!,
       details_url: jobInfo.url,
-      external_id: `${this.buildInfo.id}/${jobInfo.jobId}`,
+      external_id: `${this.buildInfo.domain}/${this.buildInfo.id}/${jobInfo.jobId}`,
       name: jobInfo.name,
       owner: this.buildInfo.owner,
       repo: this.buildInfo.repo,

@@ -47,7 +47,7 @@ export class Travis {
       }
 
       return {
-        domain,
+        domain: domain.toLowerCase(),
         headBranch,
         headSha,
         id: buildId,
