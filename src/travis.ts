@@ -68,12 +68,7 @@ export class Travis {
   public constructor (context: Context, buildInfo: BuildInfo) {
     this.baseUri = `https://api.${buildInfo.domain}`
     this.buildInfo = buildInfo
-    this.headers = {
-      ...DEFAULT_HEADERS,
-      ...(buildInfo.domain === 'travis-ci.com' && process.env.TRAVIS_TOKEN
-        ? { Authorization: `token ${process.env.TRAVIS_TOKEN}` }
-        : undefined)
-    }
+    this.headers = DEFAULT_HEADERS
     this.jobUri = `https://${buildInfo.domain}/${buildInfo.owner}/${buildInfo.repo}/jobs`
     this.log = context.log
   }
