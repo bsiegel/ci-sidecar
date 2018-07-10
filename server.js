@@ -1,3 +1,4 @@
 #!/usr/bin/env node
-process.argv.push('./dist/index.js')
+require('ts-node').register()
+process.argv.push('./src/index.ts')
 require('probot/bin/probot-run')

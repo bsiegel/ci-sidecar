@@ -14,8 +14,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "postinstall": "tsc",
-    "dev": "nodemon --ext ts,js --exec \"ts-node node_modules/probot/bin/probot.js run ./src/index.ts\"",
+    "dev": "nodemon --ext ts,js --exec \"npm start\"",
     "start": "node server.js",
     "lint": "tslint --project .",
     "fmt": "prettier --write src/**/* && tslint --project . --fix",
@@ -32,6 +31,7 @@
     "probot": "^7.0.0",
     "request": "^2.87.0",
     "request-promise-native": "^1.0.5",
+    "ts-node": "^7.0.0",
     "typescript": "^2.9.2"
   },
   "devDependencies": {
@@ -40,7 +40,6 @@
     "prettier": "^1.13.7",
     "smee-client": "^1.0.2",
     "ts-jest": "^23.0.0",
-    "ts-node": "^7.0.0",
     "tslint": "^5.10.0",
     "tslint-config-prettier": "^1.13.0",
     "tslint-config-standard": "^7.1.0"
