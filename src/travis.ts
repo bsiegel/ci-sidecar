@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-// tslint:disable-next-line:no-implicit-dependencies
 import { Status } from 'github-webhook-event-types'
 import { Context, Logger } from 'probot'
 import { createInterface as createReadline } from 'readline'
