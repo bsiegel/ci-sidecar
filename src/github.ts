@@ -134,7 +134,7 @@ export class GitHub {
     return {
       details_url: jobInfo.url,
       external_id: `${this.buildInfo.domain}/${this.buildInfo.id}/${jobInfo.jobId}`,
-      head_branch: this.buildInfo.headBranch,
+      head_branch: '',
       head_sha: this.buildInfo.headSha,
       name: jobInfo.name,
       owner: this.buildInfo.owner,

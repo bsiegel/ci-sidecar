@@ -30,7 +30,6 @@ export class Travis {
   public static parseStatus (payload: Status): BuildInfo | undefined {
     try {
       const {
-        branches: [{ name: headBranch }],
         repository: {
           name: repoName,
           owner: { login: repoOwner }
@@ -47,7 +46,6 @@ export class Travis {
 
       return {
         domain: domain.toLowerCase(),
-        headBranch,
         headSha,
         id: buildId,
         owner: repoOwner,
