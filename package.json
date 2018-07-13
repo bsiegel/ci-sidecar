@@ -2,7 +2,7 @@
   "name": "ci-sidecar",
   "version": "1.0.0",
   "description": "",
-  "author": "Brandon Siegel <brandon.siegel@microsoft.com> (https://github.com/bsiegel/ci-sidecar)",
+  "author": "Brandon Siegel <brandon@smartercode.net> (https://github.com/bsiegel/ci-sidecar)",
   "license": "MIT",
   "repository": "https://github.com/bsiegel/ci-sidecar.git",
   "homepage": "https://github.com/bsiegel/ci-sidecar",
