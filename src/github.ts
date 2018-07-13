@@ -4,7 +4,7 @@
 import Octokit from '@octokit/rest'
 import { Context, Logger } from 'probot'
 
-import { BuildInfo, GetJobOutputFunc, JobDiff, JobInfo } from './ci'
+import { BuildInfo, GetJobOutputFunc, JobInfo } from './ci'
 
 // https://developer.github.com/v3/checks/runs/#response
 interface GithubChecksCreateResponse {
@@ -46,25 +46,22 @@ export class GitHub {
     this.log = context.log
   }
 
-  public async jobsToUpdate (newJobs: ReadonlyArray<JobInfo>): Promise<JobDiff> {
+  public async checksToCreate (newJobs: ReadonlyArray<JobInfo>): Promise<ReadonlyArray<JobInfo>> {
     const create: JobInfo[] = []
-    const update: JobInfo[] = []
 
     const existingChecks = await this.getExistingChecks()
     for (const current of newJobs) {
       const existing = existingChecks.find(c => this.isCheckForJob(c, current))
-      if (!existing) {
+      if (
+        !existing ||
+        this.getStatus(current) !== existing.status ||
+        current.name !== existing.name
+      ) {
         create.push(current)
-      } else if (this.getStatus(current) !== existing.status || current.name !== existing.name) {
-        current.checkRunId = existing.id.toString()
-        update.push(current)
       }
     }
 
-    return {
-      create,
-      update
-    }
+    return create
   }
 
   public async createCheck (jobInfo: JobInfo): Promise<string | undefined> {
@@ -82,24 +79,6 @@ export class GitHub {
     } catch (e) {
       this.log.error(e, `Error occurred creating check for job ${jobInfo.jobId}`)
       return undefined
-    }
-  }
-
-  public async updateCheck (jobInfo: JobInfo): Promise<void> {
-    const payload = this.getChecksUpdateParams(jobInfo)
-    if (payload.status === 'completed') {
-      await this.addCompletionInfo(payload, jobInfo)
-    }
-
-    this.log.debug(`Updating check ${jobInfo.checkRunId} for job ${jobInfo.jobId}`, payload)
-    try {
-      await this.client.checks.update(payload)
-      this.log.debug(`Check ${jobInfo.checkRunId} updated for job ${jobInfo.jobId}`)
-    } catch (e) {
-      this.log.error(
-        e,
-        `Error occurred updating check ${jobInfo.checkRunId} for job ${jobInfo.jobId}`
-      )
     }
   }
 
@@ -144,21 +123,8 @@ export class GitHub {
     }
   }
 
-  private getChecksUpdateParams (jobInfo: JobInfo): Octokit.ChecksUpdateParams {
-    return {
-      check_run_id: jobInfo.checkRunId!,
-      details_url: jobInfo.url,
-      external_id: `${this.buildInfo.domain}/${this.buildInfo.id}/${jobInfo.jobId}`,
-      name: jobInfo.name,
-      owner: this.buildInfo.owner,
-      repo: this.buildInfo.repo,
-      started_at: jobInfo.startedAt,
-      status: this.getStatus(jobInfo)
-    }
-  }
-
   private async addCompletionInfo (
-    payload: Octokit.ChecksCreateParams | Octokit.ChecksUpdateParams,
+    payload: Octokit.ChecksCreateParams,
     jobInfo: JobInfo
   ): Promise<void> {
     payload.conclusion = this.getConclusion(jobInfo)
@@ -167,9 +133,7 @@ export class GitHub {
     try {
       const output = await this.getJobOutput(jobInfo)
       if (output) {
-        payload.output = output as
-          | Octokit.ChecksCreateParamsOutput
-          | Octokit.ChecksUpdateParamsOutput
+        payload.output = output as Octokit.ChecksCreateParamsOutput
       }
     } catch (e) {
       this.log.error(

@@ -9,14 +9,8 @@ export interface BuildInfo {
   readonly repo: string
 }
 
-export interface JobDiff {
-  readonly create: ReadonlyArray<JobInfo>
-  readonly update: ReadonlyArray<JobInfo>
-}
-
 export interface JobInfo {
   readonly jobId: string
-  checkRunId?: string
   readonly finishedAt: string
   readonly ignoreFailure: boolean
   readonly name: string

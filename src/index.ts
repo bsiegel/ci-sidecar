@@ -28,20 +28,10 @@ async function processJobs (context: Context, buildInfo: BuildInfo): Promise<voi
 
   const app = await getAppId(context)
   const github = new GitHub(app, context, buildInfo, travis.getJobOutput.bind(travis))
-  const diff = await github.jobsToUpdate(jobs)
-  context.log(`Will create ${diff.create.length} checks and update ${diff.update.length} checks`)
+  const toCreate = await github.checksToCreate(jobs)
+  context.log(`Will create or update ${toCreate.length} checks`)
 
-  const operations: Array<Promise<void>> = []
-  operations.push(
-    ...diff.create.map(async j => {
-      await github.createCheck(j)
-    })
-  )
-  operations.push(
-    ...diff.update.map(async j => {
-      await github.updateCheck(j)
-    })
-  )
+  const operations = toCreate.map(j => github.createCheck(j))
   await Promise.all(operations.map(p => p.catch(e => e)))
 }
 
