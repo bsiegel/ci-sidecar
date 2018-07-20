@@ -114,15 +114,28 @@ export class Travis {
               // ignore
             } finally {
               this.log.debug(`Parsing output of job ${jobId}`)
-              resolve(tryParse(outputString))
+              try {
+                resolve(this.parse(outputString))
+              } catch (e) {
+                reject(e)
+              }
             }
           } else if (capture) {
+            this.log.debug(trimmed)
             outputString += trimmed
           }
         })
         .on('close', () => {
-          this.log.debug(`Parsing output of job ${jobId}`)
-          resolve(tryParse(outputString))
+          if (capture) {
+            this.log.debug(`Parsing output of job ${jobId}`)
+            try {
+              resolve(this.parse(outputString))
+            } catch (e) {
+              reject(e)
+            }
+          } else {
+            resolve(undefined)
+          }
         })
     })
   }
@@ -153,12 +166,17 @@ export class Travis {
       return undefined
     }
   }
-}
 
-function tryParse (str: string): object | undefined {
-  try {
-    return JSON.parse(str)
-  } catch (e) {
+  private parse (str: string): object | undefined {
+    if (str && str.length > 0) {
+      try {
+        return JSON.parse(str)
+      } catch (e) {
+        this.log.error(`Failed to parse JSON object: ${e.toString()}`)
+        this.log.debug(str)
+        throw e
+      }
+    }
     return undefined
   }
 }
