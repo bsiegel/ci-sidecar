@@ -87,11 +87,35 @@ export class Travis {
   }
 
   public async getJobOutput (jobInfo: JobInfo): Promise<object | undefined> {
+    let tries = 10
+    while (tries > 0) {
+      try {
+        return await this.getJobOutputImpl(jobInfo)
+      } catch (e) {
+        if (e.message === 'LogStreamIncomplete') {
+          tries -= 1
+          if (tries > 0) {
+            this.log.debug(`Retrying incomplete operation in 3s (${tries} tries left)`)
+            await delay(3000)
+          }
+        } else {
+          throw e
+        }
+      }
+    }
+
+    throw new Error(`Log stream for job ${jobInfo.jobId} never completed`)
+  }
+
+  private async getJobOutputImpl (jobInfo: JobInfo): Promise<object | undefined> {
     return new Promise<object | undefined>((resolve, reject) => {
       const jobId = jobInfo.jobId
       const logUri = `${this.baseUri}/job/${jobId}/log.txt`
       let outputString = ''
-      let capture = false
+      let trimmed = ''
+      let started = false
+      let finished = false
+      let closed = false
 
       this.log.debug(`Getting log stream for job ${jobId}`)
       const req = request({
@@ -102,39 +126,45 @@ export class Travis {
       const lines = createReadline((req as any) as NodeJS.ReadableStream)
       lines
         .on('line', (line: string) => {
-          const trimmed = line.trim()
-          if (!capture && trimmed === '---output') {
+          if (closed || finished) {
+            return
+          }
+
+          trimmed = line.trim()
+          if (!started && trimmed === '---output') {
             this.log.debug(`Fenced output block detected for job ${jobId}`)
-            capture = true
-          } else if (capture && trimmed === '---') {
+            started = true
+          } else if (started && trimmed === '---') {
+            this.log.debug(`Detected end of fenced output block for job ${jobId}`)
+            finished = true
             try {
-              lines.close()
               req.abort()
             } catch (e) {
               // ignore
             } finally {
-              this.log.debug(`Parsing output of job ${jobId}`)
-              try {
-                resolve(this.parse(outputString))
-              } catch (e) {
-                reject(e)
-              }
+              lines.close()
             }
-          } else if (capture) {
-            this.log.debug(trimmed)
+          } else if (started) {
             outputString += trimmed
           }
         })
         .on('close', () => {
-          if (capture) {
-            this.log.debug(`Parsing output of job ${jobId}`)
+          closed = true
+          if (finished) {
+            this.log.debug(`Finished reading output block for ${jobId}, parsing...`)
             try {
-              resolve(this.parse(outputString))
+              resolve(JSON.parse(outputString))
             } catch (e) {
+              this.log.error(`Failed to parse JSON object: ${e.toString()}`)
+              this.log.debug(outputString)
               reject(e)
             }
-          } else {
+          } else if (trimmed.includes('Your build exited')) {
+            this.log.debug(`Finished getting log stream for job ${jobId}, no output block detected`)
             resolve(undefined)
+          } else {
+            this.log.debug(`Log stream for job ${jobId} was incomplete`)
+            reject(new Error('LogStreamIncomplete'))
           }
         })
     })
@@ -166,21 +196,12 @@ export class Travis {
       return undefined
     }
   }
-
-  private parse (str: string): object | undefined {
-    if (str && str.length > 0) {
-      try {
-        return JSON.parse(str)
-      } catch (e) {
-        this.log.error(`Failed to parse JSON object: ${e.toString()}`)
-        this.log.debug(str)
-        throw e
-      }
-    }
-    return undefined
-  }
 }
 
 function present<T> (input: null | undefined | T): input is T {
   return input != undefined
+}
+
+async function delay (ms: number): Promise<void> {
+  return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
