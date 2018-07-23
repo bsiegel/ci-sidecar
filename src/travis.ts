@@ -3,11 +3,14 @@
 
 import { Status } from 'github-webhook-event-types'
 import { Context, Logger } from 'probot'
-import { createInterface as createReadline } from 'readline'
 import request from 'request'
 import requestAsync from 'request-promise-native'
+import split2 from 'split2'
+import { promisify } from 'util'
 
 import { BuildInfo, JobInfo } from './ci'
+
+const setTimeoutAsync = promisify(setTimeout)
 
 const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
 
@@ -25,6 +28,14 @@ interface TravisJob {
   readonly started_at: string
   readonly state: string
 }
+
+type ParserState =
+  | 'initial'
+  | 'inside-block'
+  | 'block-complete'
+  | 'stream-finished'
+  | 'error'
+  | 'closed'
 
 export class Travis {
   public static parseStatus (payload: Status): BuildInfo | undefined {
@@ -96,7 +107,7 @@ export class Travis {
           tries -= 1
           if (tries > 0) {
             this.log.debug(`Retrying incomplete operation in 3s (${tries} tries left)`)
-            await delay(3000)
+            await setTimeoutAsync(3_000)
           }
         } else {
           throw e
@@ -112,58 +123,90 @@ export class Travis {
       const jobId = jobInfo.jobId
       const logUri = `${this.baseUri}/job/${jobId}/log.txt`
       let outputString = ''
-      let trimmed = ''
-      let started = false
-      let finished = false
-      let closed = false
+      let lineCount = 0
+      let state: ParserState = 'initial'
 
       this.log.debug(`Getting log stream for job ${jobId}`)
       const req = request({
         headers: this.headers,
         uri: logUri
-      }).on('error', e => reject(e))
+      })
 
-      const lines = createReadline((req as any) as NodeJS.ReadableStream)
-      lines
-        .on('line', (line: string) => {
-          if (closed || finished) {
+      const deadline = setTimeout(() => {
+        if (inProgress(state)) {
+          // the response stream was never completed
+          state = 'error'
+          this.log.error(`Deadline elapsed while getting log stream for job ${jobId}`)
+          req.abort()
+          reject(new Error('LogStreamIncomplete'))
+        }
+      }, 30_000)
+
+      req
+        .pipe(split2())
+        .on('data', (line: string) => {
+          lineCount += 1
+
+          if (!inProgress(state)) {
+            // only consider lines while looking for an output block
             return
           }
 
-          trimmed = line.trim()
-          if (!started && trimmed === '---output') {
-            this.log.debug(`Fenced output block detected for job ${jobId}`)
-            started = true
-          } else if (started && trimmed === '---') {
-            this.log.debug(`Detected end of fenced output block for job ${jobId}`)
-            finished = true
-            try {
-              req.abort()
-            } catch (e) {
-              // ignore
-            } finally {
-              lines.close()
-            }
-          } else if (started) {
-            outputString += trimmed
-          }
-        })
-        .on('close', () => {
-          closed = true
-          if (finished) {
-            this.log.debug(`Finished reading output block for ${jobId}, parsing...`)
+          const trimmed = line.trim()
+          if (state === 'initial' && trimmed === '---output') {
+            state = 'inside-block'
+            this.log.debug(`Fenced output block detected for job ${jobId} at line ${lineCount}`)
+          } else if (state === 'inside-block' && trimmed === '---') {
+            state = 'block-complete'
+            this.log.debug(
+              `Detected end of fenced output block for job ${jobId} at line ${lineCount}`
+            )
+            clearTimeout(deadline)
+            req.abort()
             try {
               resolve(JSON.parse(outputString))
             } catch (e) {
-              this.log.error(`Failed to parse JSON object: ${e.toString()}`)
+              this.log.error(e, `Failed to parse JSON object`)
               this.log.debug(outputString)
               reject(e)
             }
+          } else if (state === 'inside-block') {
+            outputString += trimmed
           } else if (trimmed.includes('Your build exited')) {
-            this.log.debug(`Finished getting log stream for job ${jobId}, no output block detected`)
+            state = 'stream-finished'
+            this.log.debug(
+              `Finished getting log stream for job ${jobId}, no output block detected in ${lineCount} lines`
+            )
+            clearTimeout(deadline)
+            req.abort()
             resolve(undefined)
-          } else {
+          }
+        })
+        .on('error', e => {
+          if (inProgress(state)) {
+            // only care about an error while looking for an output block
+            state = 'error'
+            this.log.error(e, `Error occurred getting log stream for job ${jobId}`)
+            clearTimeout(deadline)
+            req.abort()
+            reject(e)
+          }
+        })
+        .on('close', () => {
+          if (inProgress(state)) {
+            // only care about a close if we never found an output block or the end of the stream
+            state = 'closed'
             this.log.debug(`Log stream for job ${jobId} was incomplete`)
+            clearTimeout(deadline)
+            reject(new Error('LogStreamIncomplete'))
+          }
+        })
+        .on('end', () => {
+          if (inProgress(state)) {
+            // only care about a close if we never found an output block or the end of the stream
+            state = 'closed'
+            this.log.debug(`Log stream for job ${jobId} was incomplete`)
+            clearTimeout(deadline)
             reject(new Error('LogStreamIncomplete'))
           }
         })
@@ -202,6 +245,6 @@ function present<T> (input: null | undefined | T): input is T {
   return input != undefined
 }
 
-async function delay (ms: number): Promise<void> {
-  return new Promise<void>(resolve => setTimeout(resolve, ms))
+function inProgress (state: ParserState): boolean {
+  return state === 'initial' || state === 'inside-block'
 }
