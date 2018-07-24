@@ -3,16 +3,15 @@
 
 import { Status } from 'github-webhook-event-types'
 import { Context, Logger } from 'probot'
-import request from 'request'
-import requestAsync from 'request-promise-native'
-import split2 from 'split2'
+import { Headers } from 'request'
+import request from 'request-promise-native'
 import { promisify } from 'util'
 
 import { BuildInfo, JobInfo } from './ci'
 
 const setTimeoutAsync = promisify(setTimeout)
 
-const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
+const DEFAULT_HEADERS: Headers = { 'Travis-API-Version': 3 }
 
 // https://developer.travis-ci.com/resource/build
 interface TravisBuild {
@@ -29,14 +28,6 @@ interface TravisJob {
   readonly started_at: string
   readonly state: string
 }
-
-type ParserState =
-  | 'initial'
-  | 'inside-block'
-  | 'block-complete'
-  | 'stream-finished'
-  | 'error'
-  | 'closed'
 
 export class Travis {
   public static parseStatus (payload: Status): BuildInfo | undefined {
@@ -70,7 +61,7 @@ export class Travis {
 
   private readonly baseUri: string
   private readonly buildInfo: BuildInfo
-  private readonly headers: request.Headers
+  private readonly headers: Headers
   private readonly jobUri: string
   private readonly log: Logger
 
@@ -86,7 +77,7 @@ export class Travis {
     const buildUri = `${this.baseUri}/build/${this.buildInfo.id}?include=build.jobs,job.config`
 
     try {
-      const travisInfo = (await requestAsync({
+      const travisInfo = (await request({
         headers: this.headers,
         json: true,
         uri: buildUri
@@ -126,98 +117,45 @@ export class Travis {
   }
 
   private async getJobOutputImpl (jobInfo: JobInfo): Promise<object | undefined> {
-    return new Promise<object | undefined>((resolve, reject) => {
-      const jobId = jobInfo.jobId
-      const logUri = `${this.baseUri}/job/${jobId}/log.txt`
-      let outputString = ''
-      let lineCount = 0
-      let state: ParserState = 'initial'
+    const jobId = jobInfo.jobId
+    const logUri = `${this.baseUri}/job/${jobId}/log.txt`
+    let outputString = ''
+    let lineCount = 0
+    let blockStarted = false
 
-      this.log.debug(`Getting log stream for job ${jobId}`)
-      const req = request({
-        headers: this.headers,
-        uri: logUri
-      })
+    this.log.debug(`Getting log stream for job ${jobId}`)
+    const logData = (await request({
+      headers: this.headers,
+      uri: logUri
+    }).promise()) as string
 
-      const deadline = setTimeout(() => {
-        if (inProgress(state)) {
-          // the response stream was never completed
-          state = 'error'
-          this.log.error(`Deadline elapsed while getting log stream for job ${jobId}`)
-          req.abort()
-          reject(new Error('LogStreamIncomplete'))
+    for (const line of splitIter(logData, /\r?\n/g)) {
+      lineCount += 1
+      const trimmed = line.trim()
+      if (!blockStarted && trimmed === '---output') {
+        this.log.debug(`Fenced output block detected for job ${jobId} at line ${lineCount}`)
+        blockStarted = true
+      } else if (blockStarted && trimmed === '---') {
+        this.log.debug(`Detected end of fenced output block for job ${jobId} at line ${lineCount}`)
+        try {
+          return JSON.parse(outputString)
+        } catch (e) {
+          this.log.error(e, `Failed to parse JSON object`)
+          this.log.debug(outputString)
+          throw e
         }
-      }, 30_000)
+      } else if (blockStarted) {
+        outputString += trimmed
+      } else if (trimmed.includes('Your build exited')) {
+        this.log.debug(
+          `Finished getting log stream for job ${jobId}, no output block detected in ${lineCount} lines`
+        )
+        return undefined
+      }
+    }
 
-      req
-        .pipe(split2())
-        .on('data', (line: string) => {
-          lineCount += 1
-
-          if (!inProgress(state)) {
-            // only consider lines while looking for an output block
-            return
-          }
-
-          const trimmed = line.trim()
-          if (state === 'initial' && trimmed === '---output') {
-            state = 'inside-block'
-            this.log.debug(`Fenced output block detected for job ${jobId} at line ${lineCount}`)
-          } else if (state === 'inside-block' && trimmed === '---') {
-            state = 'block-complete'
-            this.log.debug(
-              `Detected end of fenced output block for job ${jobId} at line ${lineCount}`
-            )
-            clearTimeout(deadline)
-            req.abort()
-            try {
-              resolve(JSON.parse(outputString))
-            } catch (e) {
-              this.log.error(e, `Failed to parse JSON object`)
-              this.log.debug(outputString)
-              reject(e)
-            }
-          } else if (state === 'inside-block') {
-            outputString += trimmed
-          } else if (trimmed.includes('Your build exited')) {
-            state = 'stream-finished'
-            this.log.debug(
-              `Finished getting log stream for job ${jobId}, no output block detected in ${lineCount} lines`
-            )
-            clearTimeout(deadline)
-            req.abort()
-            resolve(undefined)
-          }
-        })
-        .on('error', e => {
-          if (inProgress(state)) {
-            // only care about an error while looking for an output block
-            state = 'error'
-            this.log.error(e, `Error occurred getting log stream for job ${jobId}`)
-            clearTimeout(deadline)
-            req.abort()
-            reject(e)
-          }
-        })
-        .on('close', () => {
-          if (inProgress(state)) {
-            // only care about a close if we never found an output block or the end of the stream
-            state = 'closed'
-            this.log.debug(`Log stream for job ${jobId} was incomplete`)
-            clearTimeout(deadline)
-            reject(new Error('LogStreamIncomplete'))
-          }
-        })
-        .on('end', () => {
-          if (inProgress(state)) {
-            // only care about a close if we never found an output block or the end of the stream
-            state = 'closed'
-            this.log.debug(`Log stream for job ${jobId} was incomplete`)
-            clearTimeout(deadline)
-            reject(new Error('LogStreamIncomplete'))
-          }
-        })
-    })
+    this.log.debug(`Log stream for job ${jobId} was incomplete`)
+    throw new Error('LogStreamIncomplete')
   }
 
   private getJobInfo (job: TravisJob): JobInfo | undefined {
@@ -252,6 +190,18 @@ function present<T> (input: null | undefined | T): input is T {
   return input != undefined
 }
 
-function inProgress (state: ParserState): boolean {
-  return state === 'initial' || state === 'inside-block'
+function* splitIter (input: string, regex: RegExp): IterableIterator<string> {
+  let last = 0
+  while (true) {
+    const result = regex.exec(input)
+    if (!result) {
+      if (last <= input.length) {
+        yield input.substr(last, input.length - last)
+      }
+      return
+    }
+
+    yield input.substr(last, result.index - last)
+    last = regex.lastIndex
+  }
 }
