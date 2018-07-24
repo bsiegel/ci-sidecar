@@ -16,6 +16,7 @@ const DEFAULT_HEADERS: request.Headers = { 'Travis-API-Version': 3 }
 
 // https://developer.travis-ci.com/resource/build
 interface TravisBuild {
+  readonly event_type: string
   readonly jobs: ReadonlyArray<TravisJob>
 }
 
@@ -85,12 +86,18 @@ export class Travis {
     const buildUri = `${this.baseUri}/build/${this.buildInfo.id}?include=build.jobs,job.config`
 
     try {
-      const buildInfo = (await requestAsync({
+      const travisInfo = (await requestAsync({
         headers: this.headers,
         json: true,
         uri: buildUri
       }).promise()) as TravisBuild
-      return buildInfo.jobs.map(this.getJobInfo, this).filter(present)
+
+      if (travisInfo.event_type === 'pull_request') {
+        return travisInfo.jobs.map(this.getJobInfo, this).filter(present)
+      } else {
+        this.log.info(`Build for event '${travisInfo.event_type}' will not be processed`)
+        return undefined
+      }
     } catch (e) {
       this.log.error(e, `Failed to load job info for build ${this.buildInfo.id}`)
       return undefined
