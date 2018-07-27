@@ -100,13 +100,13 @@ export class Travis {
   public async getJobOutput (jobInfo: JobInfo): Promise<object | undefined> {
     let tries = 10
     while (tries > 0) {
+      await setTimeoutAsync(3_000)
       try {
         return await this.getJobOutputImpl(jobInfo)
       } catch (e) {
         tries -= 1
         if (tries > 0) {
           this.log.debug(`Retrying incomplete operation in 3s (${tries} tries left)`)
-          await setTimeoutAsync(3_000)
         }
       }
     }
