@@ -130,6 +130,10 @@ export class GitHub {
     payload.conclusion = this.getConclusion(jobInfo)
     payload.completed_at = jobInfo.finishedAt
 
+    if (payload.conclusion === 'cancelled') {
+      return
+    }
+
     try {
       const output = await this.getJobOutput(jobInfo)
       if (output) {
