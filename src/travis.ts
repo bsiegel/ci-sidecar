@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 import { Status } from 'github-webhook-event-types'
+import jsonlint from 'jsonlint'
 import { Context, Logger } from 'probot'
 import { Headers } from 'request'
 import request from 'request-promise-native'
@@ -138,7 +139,8 @@ export class Travis {
         try {
           return JSON.parse(outputString)
         } catch (e) {
-          this.log.error(e, `Failed to parse JSON object`)
+          const betterError = getJSONLintError(outputString, e)
+          this.log.error(betterError, `Failed to parse JSON object`)
           this.log.debug(outputString)
           throw e
         }
@@ -202,4 +204,14 @@ function* splitIter (input: string, regex: RegExp): IterableIterator<string> {
     yield input.substr(last, result.index - last)
     last = regex.lastIndex
   }
+}
+
+function getJSONLintError (text: string, original: Error): Error {
+  try {
+    jsonlint.parse(text)
+  } catch (e) {
+    return e
+  }
+
+  return original
 }
