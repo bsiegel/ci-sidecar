@@ -102,19 +102,15 @@ export class Travis {
       try {
         return await this.getJobOutputImpl(jobInfo)
       } catch (e) {
-        if (e.message === 'LogStreamIncomplete') {
-          tries -= 1
-          if (tries > 0) {
-            this.log.debug(`Retrying incomplete operation in 3s (${tries} tries left)`)
-            await setTimeoutAsync(3_000)
-          }
-        } else {
-          throw e
+        tries -= 1
+        if (tries > 0) {
+          this.log.debug(`Retrying incomplete operation in 3s (${tries} tries left)`)
+          await setTimeoutAsync(3_000)
         }
       }
     }
 
-    throw new Error(`Log stream for job ${jobInfo.jobId} never completed`)
+    throw new Error(`Log stream for job ${jobInfo.jobId} never completed successfully`)
   }
 
   private async getJobOutputImpl (jobInfo: JobInfo): Promise<object | undefined> {
