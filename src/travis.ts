@@ -79,7 +79,6 @@ export class Travis {
 
     try {
       const travisInfo = (await request({
-        gzip: true,
         headers: this.headers,
         json: true,
         uri: buildUri
@@ -123,7 +122,6 @@ export class Travis {
 
     this.log.debug(`Getting log stream for job ${jobId}`)
     const logData = (await request({
-      gzip: true,
       headers: this.headers,
       uri: logUri
     }).promise()) as string
