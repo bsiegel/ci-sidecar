@@ -20,6 +20,11 @@ interface TravisBuild {
   readonly jobs: ReadonlyArray<TravisJob>
 }
 
+interface TravisLog {
+  readonly content: string
+  readonly log_parts: Array<{ readonly final: boolean }>
+}
+
 // https://developer.travis-ci.com/resource/jobs
 interface TravisJob {
   readonly allow_failure: boolean
@@ -115,7 +120,7 @@ export class Travis {
 
   private async getJobOutputImpl (jobInfo: JobInfo): Promise<object | undefined> {
     const jobId = jobInfo.jobId
-    const logUri = `${this.baseUri}/job/${jobId}/log.txt`
+    const logUri = `${this.baseUri}/job/${jobId}/log`
     let outputString = ''
     let lineCount = 0
     let blockStarted = false
@@ -123,10 +128,17 @@ export class Travis {
     this.log.debug(`Getting log stream for job ${jobId}`)
     const logData = (await request({
       headers: this.headers,
+      json: true,
       uri: logUri
-    }).promise()) as string
+    }).promise()) as TravisLog
 
-    for (const line of splitIter(logData, /\r?\n/g)) {
+    const lastPart = logData.log_parts[logData.log_parts.length - 1]
+    if (!lastPart.final && !logData.log_parts.find(p => p.final)) {
+      this.log.debug(`Log stream for job ${jobId} was incomplete`)
+      throw new Error('LogStreamIncomplete')
+    }
+
+    for (const line of splitIter(logData.content, /\r?\n/g)) {
       lineCount += 1
       const trimmed = line.trim()
       if (!blockStarted && trimmed === '---output') {
