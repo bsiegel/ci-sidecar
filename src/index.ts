@@ -9,6 +9,7 @@ import { GitHub } from './github'
 import { Travis } from './travis'
 
 const inProgress = new Set()
+const secondChance = new Map()
 let appId = parseInt(process.env.APP_ID || '', 10)
 
 async function getAppId (context: Context): Promise<number> {
@@ -63,9 +64,30 @@ export = (app: Application) => {
           e,
           `Error occurred processing jobs for status update ${context.payload.id}`
         )
-      } finally {
-        inProgress.delete(key)
       }
+
+      if (secondChance.has(key)) {
+        try {
+          await processJobs(context, buildInfo)
+        } catch (e) {
+          context.log.error(
+            e,
+            `Error occurred processing jobs for status update ${secondChance.get(
+              key
+            )} (from second chance)`
+          )
+        }
+      }
+
+      inProgress.delete(key)
+      secondChance.delete(key)
+    } else if (!secondChance.has(key)) {
+      secondChance.set(key, context.payload.id)
+      context.log(
+        `Job processing already in progress for status update ${
+          context.payload.id
+        }, registering for second chance...`
+      )
     } else {
       context.log(
         `Job processing already in progress for status update ${context.payload.id}, skipping...`
