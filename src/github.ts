@@ -3,6 +3,8 @@
 
 import Octokit from '@octokit/rest'
 import { Context, Logger } from 'probot'
+// tslint:disable-next-line:no-submodule-imports
+import { GitHubAPI } from 'probot/lib/github'
 
 import { BuildInfo, GetJobOutputFunc, JobInfo } from './ci'
 
@@ -29,7 +31,7 @@ export class GitHub {
 
   private readonly appId: number
   private readonly buildInfo: BuildInfo
-  private readonly client: Octokit
+  private readonly client: GitHubAPI
   private readonly getJobOutput: GetJobOutputFunc
   private readonly log: Logger
 
@@ -85,14 +87,19 @@ export class GitHub {
   private async getExistingChecks (): Promise<ReadonlyArray<GithubCheck>> {
     this.log.debug(`Fetching existing checks for build ${this.buildInfo.id}`)
     try {
-      const result = await this.client.checks.listForRef({
-        owner: this.buildInfo.owner,
-        ref: this.buildInfo.headSha,
-        repo: this.buildInfo.repo
-      })
+      const myChecks: GithubCheck[] = []
+      await this.client.paginate(
+        this.client.checks.listForRef({
+          owner: this.buildInfo.owner,
+          ref: this.buildInfo.headSha,
+          repo: this.buildInfo.repo
+        }),
+        res => {
+          const checksResponse = res.data as GithubChecksListResponse
+          myChecks.push(...checksResponse.check_runs.filter(c => c.app.id === this.appId))
+        }
+      )
 
-      const checksResponse = result.data as GithubChecksListResponse
-      const myChecks = checksResponse.check_runs.filter(c => c.app.id === this.appId)
       this.log.debug(`Fetched ${myChecks.length} existing checks for build ${this.buildInfo.id}`)
       return myChecks
     } catch (e) {
