@@ -6,7 +6,8 @@ import { Context, Logger } from 'probot'
 // tslint:disable-next-line:no-submodule-imports
 import { GitHubAPI } from 'probot/lib/github'
 
-import { BuildInfo, GetJobOutputFunc, JobInfo } from './ci'
+import { IssueComment } from 'github-webhook-event-types'
+import { BuildInfo, GetJobOutputFunc, JobInfo, StatusInfo } from './ci'
 
 // https://developer.github.com/v3/checks/runs/#response
 interface GithubChecksCreateResponse {
@@ -26,7 +27,85 @@ interface GithubCheck {
   readonly app: { readonly id: number }
 }
 
+interface GithubPullRequest {
+  readonly head: { readonly sha: string }
+}
+
+interface GithubStatus {
+  readonly context: string
+  readonly target_url: string
+}
+
 export class GitHub {
+  public static async deleteComment (context: Context, issueComment: IssueComment) {
+    const repo = issueComment.repository
+    try {
+      await context.github.issues.deleteComment({
+        comment_id: issueComment.comment.id.toString(),
+        owner: repo.owner.login,
+        repo: repo.name
+      })
+    } catch (e) {
+      context.log.error(
+        e,
+        `Error occurred deleting rescan comment for PR ${issueComment.issue.number} in ${
+          repo.full_name
+        }`
+      )
+    }
+  }
+
+  public static async getLatestTravisStatus (
+    context: Context,
+    issueComment: IssueComment
+  ): Promise<StatusInfo | undefined> {
+    const repo = issueComment.repository
+    try {
+      const pr = (await context.github.pullRequests.get({
+        number: issueComment.issue.number,
+        owner: repo.owner.login,
+        repo: repo.name
+      })).data as GithubPullRequest
+
+      let travisStatus: GithubStatus | undefined
+      await context.github.paginate(
+        context.github.repos.getStatuses({
+          owner: repo.owner.login,
+          ref: pr.head.sha,
+          repo: repo.name
+        }),
+        ((res: Octokit.AnyResponse, done: () => void) => {
+          const statusesResponse = res.data as GithubStatus[]
+          for (const status of statusesResponse) {
+            if (status.context === 'continuous-integration/travis-ci/pr') {
+              travisStatus = status
+              done()
+              break
+            }
+          }
+        }) as any // Type information for this parameter is wrong :(
+      )
+
+      if (!travisStatus) {
+        return undefined
+      }
+
+      return {
+        repository: repo,
+        sha: pr.head.sha,
+        target_url: travisStatus.target_url
+      }
+    } catch (e) {
+      context.log.error(
+        e,
+        `Error occurred fetching latest Travis status for PR ${issueComment.issue.number} in ${
+          repo.full_name
+        }`
+      )
+      return undefined
+    }
+  }
+
   private static readonly FINISHED_STATES = ['passed', 'failed', 'errored', 'canceled']
 
   private readonly appId: number

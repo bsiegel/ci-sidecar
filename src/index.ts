@@ -1,9 +1,11 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import { Status } from 'github-webhook-event-types'
+import { IssueComment, Status } from 'github-webhook-event-types'
 import { Application, Context } from 'probot'
 
+// tslint:disable-next-line:no-submodule-imports
+import { IssueCommentIssue } from 'github-webhook-event-types/source/IssueComment'
 import { BuildInfo } from './ci'
 import { GitHub } from './github'
 import { Travis } from './travis'
@@ -11,6 +13,10 @@ import { Travis } from './travis'
 const inProgress = new Set()
 const secondChance = new Map()
 let appId = parseInt(process.env.APP_ID || '', 10)
+
+interface IssueCommentPullRequestIssue extends IssueCommentIssue {
+  readonly pull_request?: object
+}
 
 async function getAppId (context: Context): Promise<number> {
   if (!appId) {
@@ -42,10 +48,42 @@ function getProgressKey (buildInfo: BuildInfo): string {
 }
 
 export = (app: Application) => {
+  app.on('issue_comment', async context => {
+    const issueComment: IssueComment = context.payload
+    const issue = issueComment.issue as IssueCommentPullRequestIssue
+    const repo = issueComment.repository
+
+    if (
+      issue.pull_request !== undefined &&
+      issueComment.action !== 'deleted' &&
+      issueComment.comment.body.toLowerCase() === '/ci rescan'
+    ) {
+      context.log(`Rescan requested for PR ${issue.number} in ${repo.full_name}`)
+      await GitHub.deleteComment(context, issueComment)
+
+      const status = await GitHub.getLatestTravisStatus(context, issueComment)
+      if (!status) {
+        context.log(`No Travis run found for PR ${issue.number} in ${repo.full_name}`)
+        return
+      }
+
+      const buildInfo = Travis.parseStatus(status)
+      if (!buildInfo) {
+        context.log(
+          `Could not extract build info from latest Travis run for PR ${issue.number} in ${
+            repo.full_name
+          }`
+        )
+        return
+      }
+
+      await processJobs(context, buildInfo)
+    }
+  })
+
   app.on('status', async context => {
     context.log(`Processing status update ${context.payload.id}`)
-    // tslint:disable-next-line:no-unnecessary-type-assertion
-    const status = (context.payload as any) as Status
+    const status: Status = context.payload
     const buildInfo = Travis.parseStatus(status)
     if (!buildInfo) {
       context.log(`No Travis info detected in status update ${context.payload.id}`)
