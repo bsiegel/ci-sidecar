@@ -1,14 +1,13 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-import { Status } from 'github-webhook-event-types'
 import jsonlint from 'jsonlint'
 import { Context, Logger } from 'probot'
 import { Headers } from 'request'
 import request from 'request-promise-native'
 import { promisify } from 'util'
 
-import { BuildInfo, JobInfo } from './ci'
+import { BuildInfo, JobInfo, StatusInfo } from './ci'
 
 const setTimeoutAsync = promisify(setTimeout)
 
@@ -36,7 +35,7 @@ interface TravisJob {
 }
 
 export class Travis {
-  public static parseStatus (payload: Status): BuildInfo | undefined {
+  public static parseStatus (payload: StatusInfo): BuildInfo | undefined {
     try {
       const {
         repository: {
@@ -46,6 +45,10 @@ export class Travis {
         sha: headSha,
         target_url: targetUrl
       } = payload
+
+      if (!targetUrl) {
+        return undefined
+      }
 
       const buildId = (/\/builds\/(\d+)/g.exec(targetUrl) || [])[1]
       const domain = (/\/\/(travis-ci\.\w+)\//g.exec(targetUrl) || [])[1]

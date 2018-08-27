@@ -19,4 +19,13 @@ export interface JobInfo {
   readonly url: string
 }
 
+export interface StatusInfo {
+  readonly repository: {
+    readonly name: string
+    readonly owner: { readonly login: string }
+  }
+  readonly sha: string
+  readonly target_url?: string
+}
+
 export type GetJobOutputFunc = (jobInfo: JobInfo) => Promise<object | undefined>
