@@ -14,7 +14,7 @@ let appId = parseInt(process.env.APP_ID || '', 10)
 
 async function getAppId (context: Context): Promise<number> {
   if (!appId) {
-    appId = (await context.github.apps.get({})).data.id
+    appId = (await context.github.apps.get({})).data.id as number
   }
   return appId
 }
