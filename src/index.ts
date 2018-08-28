@@ -38,8 +38,9 @@ async function processJobs (context: Context, buildInfo: BuildInfo): Promise<voi
   const toCreate = await github.checksToCreate(jobs)
   context.log(`Will create or update ${toCreate.length} checks`)
 
-  const operations = toCreate.map(j => github.createCheck(j))
-  await Promise.all(operations.map(p => p.catch(e => e)))
+  for (const job of toCreate) {
+    await github.createCheck(job)
+  }
 }
 
 function getProgressKey (buildInfo: BuildInfo): string {
