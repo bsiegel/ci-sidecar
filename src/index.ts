@@ -10,8 +10,8 @@ import { BuildInfo } from './ci'
 import { GitHub } from './github'
 import { Travis } from './travis'
 
-const inProgress = new Set()
-const secondChance = new Map()
+const inProgress = new Map()
+const maxInProgress = parseInt(process.env.MAX_IN_PROGRESS || '2', 10)
 let appId = parseInt(process.env.APP_ID || '', 10)
 
 interface IssueCommentPullRequestIssue extends IssueCommentIssue {
@@ -45,6 +45,10 @@ async function processJobs (context: Context, buildInfo: BuildInfo): Promise<voi
 function getProgressKey (buildInfo: BuildInfo): string {
   // Build ID is unique per Travis installation
   return `${buildInfo.domain}/${buildInfo.id}`
+}
+
+function getPendingCount (key: string): number {
+  return inProgress.get(key) || 0
 }
 
 export = (app: Application) => {
@@ -89,49 +93,50 @@ export = (app: Application) => {
       context.log(`No Travis info detected in status update ${context.payload.id}`)
       return
     }
-    context.log(`Travis info detected in status update ${context.payload.id}`)
 
     const key = getProgressKey(buildInfo)
-    if (!inProgress.has(key)) {
-      inProgress.add(key)
-      context.log(`Processing jobs for status update ${context.payload.id}`)
-      try {
-        await processJobs(context, buildInfo)
-      } catch (e) {
-        context.log.error(
-          e,
-          `Error occurred processing jobs for status update ${context.payload.id}`
-        )
-      }
+    context.log(`Travis info detected in status update ${context.payload.id}: ${key}`)
 
-      if (secondChance.has(key)) {
-        try {
-          await processJobs(context, buildInfo)
-        } catch (e) {
-          context.log.error(
-            e,
-            `Error occurred processing jobs for status update ${secondChance.get(
-              key
-            )} (from second chance)`
-          )
-        }
-      }
-
-      inProgress.delete(key)
-      secondChance.delete(key)
-    } else if (!secondChance.has(key)) {
-      secondChance.set(key, context.payload.id)
+    const pending = getPendingCount(key) + 1
+    if (pending > maxInProgress) {
       context.log(
-        `Job processing already in progress for status update ${
-          context.payload.id
-        }, registering for second chance...`
+        `Maximum of ${maxInProgress} events already pending for build ${key}, dropping this event`
       )
-    } else {
-      context.log(
-        `Job processing already in progress for status update ${context.payload.id}, skipping...`
-      )
+      context.log(`Finished processing status update ${context.payload.id}`)
+      return
     }
 
+    inProgress.set(key, pending)
+
+    if (pending > 1) {
+      context.log(
+        `Job processing already in progress for build ${key}, now ${pending} events to process for this build`
+      )
+      context.log(`Finished processing status update ${context.payload.id}`)
+      return
+    }
+
+    while (getPendingCount(key) > 0) {
+      try {
+        context.log(
+          `Processing jobs for build ${key}, ${getPendingCount(key) -
+            1} events to process after this one`
+        )
+        await processJobs(context, buildInfo)
+      } catch (e) {
+        context.log.error(e, `Error occurred processing jobs for build ${key}`)
+      }
+
+      const pendingAfter = getPendingCount(key) - 1
+      context.log(
+        `Finished processing jobs for build ${key}, now ${pendingAfter} events to process for this build`
+      )
+      if (pendingAfter > 0) {
+        inProgress.set(key, pendingAfter)
+      } else {
+        inProgress.delete(key)
+      }
+    }
     context.log(`Finished processing status update ${context.payload.id}`)
   })
 }
