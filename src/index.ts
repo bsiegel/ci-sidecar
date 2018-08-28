@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
+import Octokit from '@octokit/rest'
 import { IssueComment, Status } from 'github-webhook-event-types'
 import { Application, Context } from 'probot'
 
@@ -50,6 +51,30 @@ function getProgressKey (buildInfo: BuildInfo): string {
 
 function getPendingCount (key: string): number {
   return inProgress.get(key) || 0
+}
+
+async function logInstallations (app: Application): Promise<void> {
+  const github = await app.auth()
+  const installationIds = await github.paginate(
+    github.apps.getInstallations({}),
+    (res: Octokit.Response<Octokit.GetInstallationsResponse>) => {
+      const installations = res.data as Octokit.GetInstallationsResponseItem[]
+      return installations.map(i => i.id)
+    }
+  )
+
+  for (const id of installationIds) {
+    app.log(`Installation ${id} repos:`)
+    const githubAuthed = await app.auth(id)
+    await githubAuthed.paginate(
+      githubAuthed.apps.getInstallationRepositories({}),
+      (res: Octokit.Response<Octokit.GetInstallationRepositoriesResponse>) => {
+        for (const repo of res.data.repositories) {
+          app.log(repo.full_name)
+        }
+      }
+    )
+  }
 }
 
 export = (app: Application) => {
@@ -140,4 +165,13 @@ export = (app: Application) => {
     }
     context.log(`Finished processing status update ${context.payload.id}`)
   })
+
+  app.on('installation', async context => {
+    context.log('App Installation Event')
+    await logInstallations(app)
+  })
+
+  // Log installations on start
+  app.log('App Initializing')
+  logInstallations(app).catch(e => e)
 }
