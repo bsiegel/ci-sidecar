@@ -71,6 +71,7 @@ export class GitHub {
       await context.github.paginate(
         context.github.repos.getStatuses({
           owner: repo.owner.login,
+          per_page: 100,
           ref: pr.head.sha,
           repo: repo.name
         }),
@@ -170,6 +171,7 @@ export class GitHub {
       await this.client.paginate(
         this.client.checks.listForRef({
           owner: this.buildInfo.owner,
+          per_page: 100,
           ref: this.buildInfo.headSha,
           repo: this.buildInfo.repo
         }),

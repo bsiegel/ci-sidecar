@@ -56,7 +56,7 @@ function getPendingCount (key: string): number {
 async function logInstallations (app: Application): Promise<void> {
   const github = await app.auth()
   const installationIds = await github.paginate(
-    github.apps.getInstallations({}),
+    github.apps.getInstallations({ per_page: 100 }),
     (res: Octokit.Response<Octokit.GetInstallationsResponse>) => {
       const installations = res.data as Octokit.GetInstallationsResponseItem[]
       return installations.map(i => i.id)
@@ -67,7 +67,7 @@ async function logInstallations (app: Application): Promise<void> {
     app.log(`Installation ${id} repos:`)
     const githubAuthed = await app.auth(id)
     await githubAuthed.paginate(
-      githubAuthed.apps.getInstallationRepositories({}),
+      githubAuthed.apps.getInstallationRepositories({ per_page: 100 }),
       (res: Octokit.Response<Octokit.GetInstallationRepositoriesResponse>) => {
         for (const repo of res.data.repositories) {
           app.log(repo.full_name)
