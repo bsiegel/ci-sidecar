@@ -9,33 +9,6 @@ import { GitHubAPI } from 'probot/lib/github'
 import { IssueComment } from 'github-webhook-event-types'
 import { BuildInfo, GetJobOutputFunc, JobInfo, StatusInfo } from './ci'
 
-// https://developer.github.com/v3/checks/runs/#response
-interface GithubChecksCreateResponse {
-  readonly id: number
-}
-
-// https://developer.github.com/v3/checks/runs/#response-3
-interface GithubChecksListResponse {
-  readonly check_runs: ReadonlyArray<GithubCheck>
-}
-
-interface GithubCheck {
-  readonly external_id?: string
-  readonly id: number
-  readonly name: string
-  readonly status: 'completed' | 'in_progress' | 'queued'
-  readonly app: { readonly id: number }
-}
-
-interface GithubPullRequest {
-  readonly head: { readonly sha: string }
-}
-
-interface GithubStatus {
-  readonly context: string
-  readonly target_url: string
-}
-
 export class GitHub {
   public static async deleteComment (context: Context, issueComment: IssueComment) {
     const repo = issueComment.repository
@@ -65,9 +38,13 @@ export class GitHub {
         number: issueComment.issue.number,
         owner: repo.owner.login,
         repo: repo.name
-      })).data as GithubPullRequest
+      })).data
 
-      let travisStatus: GithubStatus | undefined
+      if (!pr.head) {
+        return undefined
+      }
+
+      let travisStatus: Octokit.GetStatusesResponseItem | undefined
       await context.github.paginate(
         context.github.repos.getStatuses({
           owner: repo.owner.login,
@@ -75,9 +52,8 @@ export class GitHub {
           ref: pr.head.sha,
           repo: repo.name
         }),
-        ((res: Octokit.AnyResponse, done: () => void) => {
-          const statusesResponse = res.data as GithubStatus[]
-          for (const status of statusesResponse) {
+        ((res: Octokit.Response<Octokit.GetStatusesResponse>, done: () => void) => {
+          for (const status of res.data) {
             if (status.context === 'continuous-integration/travis-ci/pr') {
               travisStatus = status
               done()
@@ -155,7 +131,7 @@ export class GitHub {
     this.log.debug(`Creating check for job ${jobInfo.jobId}`, payload)
     try {
       const result = await this.client.checks.create(payload)
-      const checkRunId = (result.data as GithubChecksCreateResponse).id.toString()
+      const checkRunId = result.data.id.toString()
       this.log.debug(`Check ${checkRunId} created for job ${jobInfo.jobId}`)
       return checkRunId
     } catch (e) {
@@ -164,20 +140,22 @@ export class GitHub {
     }
   }
 
-  private async getExistingChecks (): Promise<ReadonlyArray<GithubCheck>> {
+  private async getExistingChecks (): Promise<
+    ReadonlyArray<Octokit.ListForRefResponseCheckRunsItem>
+  > {
     this.log.debug(`Fetching existing checks for build ${this.buildInfo.id}`)
     try {
-      const myChecks: GithubCheck[] = []
-      await this.client.paginate(
+      const myChecks: ReadonlyArray<
+        Octokit.ListForRefResponseCheckRunsItem
+      > = await this.client.paginate(
         this.client.checks.listForRef({
           owner: this.buildInfo.owner,
           per_page: 100,
           ref: this.buildInfo.headSha,
           repo: this.buildInfo.repo
         }),
-        res => {
-          const checksResponse = res.data as GithubChecksListResponse
-          myChecks.push(...checksResponse.check_runs.filter(c => c.app.id === this.appId))
+        (res: Octokit.Response<Octokit.ListForRefResponse>) => {
+          return res.data.check_runs.filter(c => c.app.id === this.appId)
         }
       )
 
@@ -189,7 +167,7 @@ export class GitHub {
     }
   }
 
-  private isCheckForJob (c: GithubCheck, j: JobInfo): boolean {
+  private isCheckForJob (c: Octokit.ListForRefResponseCheckRunsItem, j: JobInfo): boolean {
     if (!c.external_id) {
       return false
     }
